@@ -1,26 +1,36 @@
-# Capri mods
+# Hologram Speech Glass
 
-Mods for [Capri](https://github.com/lachydotmcg/capri-desktop), the desktop companion. Find one you like, or share your own.
+![Hologram Speech Glass banner](preview.png)
 
-Every mod is checked for malware before it goes up here.
+A Windows code mod for [Capri Desktop](https://github.com/lachydotmcg/capri-desktop) that makes Capri's speech bubble translucent in Hologram mode.
 
-## Kinds of mod
-- **Settings mods** (`.capri-mod`): extra names, colours and other settings. In Capri 0.8.5 or newer, a mod that only changes her colours shows under Skins.
-- **Code mods** (`.capri-code`): C# that Capri compiles and runs. Code mods can do anything on your PC, so Capri asks before running one.
-- **Skins** (`.capri-skin`): a zip of pictures that replace her art.
-- **Skills** (`.capri-skill`): know-how for a game, like what to build and when. Capri follows it whenever she plays that game. Skills need Capri 0.8.4 or newer.
+The mod shows a click-through copy of the speech bubble at 63% opacity while Hologram mode is active. The standard bubble returns when you exit Hologram mode or turn Speech Glass off.
 
-## Using a mod
-In Capri 0.8.3 or newer, open Capri Mainframe and press Mods in the CAPRI band. Browse mods lists everything here with previews, downloads and ratings, and Install puts a mod in and turns it on. You can also download a mod file from here and use Import mod.
+## Installation
 
-## Sharing a mod
-1. Fork this repo.
-2. Add a folder under `mods/` named after your mod. Put in the mod file and a short `README.md` that says what it does. Your GitHub username goes on it as the author. Add a `- Made by:` line if you'd like a different name.
-3. Add a picture called `preview.png`, around 16:9, if you have one. That picture is what people see in Capri's mods window. Mods without one get a default picture.
-4. Open a pull request.
+1. Download [hologram-speech-glass.capri-code](hologram-speech-glass.capri-code).
+2. Open **Mainframe → CAPRI → Mods and approve it.
+3. Open **Mainframe → Settings → Capri** and use the **Speech Glass** switch in the **Hologram** section. The mod remembers your choice.
 
-## Stay safe
-- Only install mods from here, or from people you trust.
-- Only get Capri itself from [capriai.app](https://capriai.app) or [its GitHub](https://github.com/lachydotmcg/capri-desktop/releases).
+## Changelog
 
-Questions? Ask on the [Capri Discord](https://discord.gg/capridesktop).
+### v0.1.10
+
+- Removed continuous idle checks. The timer stops when the speech bubble is hidden or Speech Glass is disabled.
+- With a visible bubble, check every 50 ms while the effect is active and every 500 ms outside Hologram mode.
+- Reuse the translucent image buffer across frames of the same size. Reuse the rendered image when the bubble only moves and release rendering resources when the effect ends.
+- Update the Mainframe layout when settings rows change. Speech Glass appears below Music Light when both mods are enabled and leaves the Music Light row in place.
+
+### v0.1.4
+
+- Initial release with a click-through, translucent speech bubble in Hologram mode and a Speech Glass toggle in Mainframe.
+- 10ms (fixed in new Version)
+
+## Compatibility
+
+Version 0.1.10 uses internal Capri interfaces for speech rendering and settings. Future Capri updates may require a mod update. Speech Glass can run alongside Capri Bezel LED v0.6.1.
+
+## Credits
+
+- Made by: Dominik20074
+- AI assisted with the code and preview artwork.
