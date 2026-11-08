@@ -4,6 +4,8 @@
 
 Auto Game Hologram is a Windows code mod for [Capri Desktop](https://github.com/lachydotmcg/capri-desktop). It turns on Capri's click-through Hologram mode when a recognized game is in the foreground. When you leave the game, it restores the previous state if the mod made the change automatically.
 
+To tell when a game is in front, it reads the title and app name of the window in front.
+
 ## Installation
 
 1. Download [auto-game-hologram.capri-code](auto-game-hologram.capri-code).
