@@ -1,23 +1,26 @@
-# Capri Bezel LED
+# Capri mods
 
-![Capri Bezel LED preview](preview.png)
+Mods for [Capri](https://github.com/lachydotmcg/capri-desktop), the desktop companion. Find one you like, or share your own.
 
-Capri Bezel LED adds a music-reactive rainbow glow around the edges of your primary display. Colors travel around the screen and blend through the corners. The light fades into transparency toward the center, and mouse clicks pass through the overlay.
+Every mod is checked for malware before it goes up here.
 
-When Capri detects the beat, the glow pulses in time with it. While music is playing without a detected beat, the glow pulses gently. It fades out when playback stops.
+## Kinds of mod
+- **Settings mods** (`.capri-mod`): extra names, colours and other settings. In Capri 0.8.5 or newer, a mod that only changes her colours shows under Skins.
+- **Code mods** (`.capri-code`): C# that Capri compiles and runs. Code mods can do anything on your PC, so Capri asks before running one.
+- **Skins** (`.capri-skin`): a zip of pictures that replace her art.
+- **Skills** (`.capri-skill`): know-how for a game, like what to build and when. Capri follows it whenever she plays that game. Skills need Capri 0.8.4 or newer.
 
-## Installation
+## Using a mod
+In Capri 0.8.3 or newer, open Capri Mainframe and press Mods in the CAPRI band. Browse mods lists everything here with previews, downloads and ratings, and Install puts a mod in and turns it on. You can also download a mod file from here and use Import mod.
 
-1. Download [capri-bezel-led.capri-code](capri-bezel-led.capri-code).
-2. In Capri, open **Mainframe → CAPRI → Mods → Import mod** and select the file.
-3. Approve the code mod when prompted.
-4. Open **Mainframe → Settings → Capri** and use **Music Light**, directly below **Hologram**, to turn the effect on or off. The mod remembers your choice.
+## Sharing a mod
+1. Fork this repo.
+2. Add a folder under `mods/` named after your mod. Put in the mod file and a short `README.md` that says what it does. Your GitHub username goes on it as the author. Add a `- Made by:` line if you'd like a different name.
+3. Add a picture called `preview.png`, around 16:9, if you have one. That picture is what people see in Capri's mods window. Mods without one get a default picture.
+4. Open a pull request.
 
-## Compatibility
+## Stay safe
+- Only install mods from here, or from people you trust.
+- Only get Capri itself from [capriai.app](https://capriai.app) or [its GitHub](https://github.com/lachydotmcg/capri-desktop/releases).
 
-Version **0.5.2** is a Windows code mod for Capri Desktop. It uses Capri's internal music detection and Mainframe controls. Future Capri updates may require a mod update.
-
-## Credits
-
-- Made by: Dominik20074
-- AI assisted with the code and preview artwork.
+Questions? Ask on the [Capri Discord](https://discord.gg/capridesktop).
