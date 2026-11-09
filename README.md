@@ -1,26 +1,29 @@
-# Capri mods
+# Capri Stream
 
-Mods for [Capri](https://github.com/lachydotmcg/capri-desktop), the desktop companion. Find one you like, or share your own.
+![Capri Stream banner](preview.png)
 
-Every mod is checked for malware before it goes up here.
+Capri Stream is a Windows code mod for Capri Desktop. It mirrors Capri’s avatar, visible speech bubble, and application audio in a transparent OBS Browser Source on the same PC.
 
-## Kinds of mod
-- **Settings mods** (`.capri-mod`): extra names, colours and other settings. In Capri 0.8.5 or newer, a mod that only changes her colours shows under Skins.
-- **Code mods** (`.capri-code`): C# that Capri compiles and runs. Code mods can do anything on your PC, so Capri asks before running one.
-- **Skins** (`.capri-skin`): a zip of pictures that replace her art.
-- **Skills** (`.capri-skill`): know-how for a game, like what to build and when. Capri follows it whenever she plays that game. Skills need Capri 0.8.4 or newer.
+## Installation
 
-## Using a mod
-In Capri 0.8.3 or newer, open Capri Mainframe and press Mods in the CAPRI band. Browse mods lists everything here with previews, downloads and ratings, and Install puts a mod in and turns it on. You can also download a mod file from here and use Import mod.
+1. Download [capri-stream.capri-code](capri-stream.capri-code).
+2. Open **Mainframe → Mods → Import mod** and select the file.
+3. Approve the code mod when prompted.
 
-## Sharing a mod
-1. Fork this repo.
-2. Add a folder under `mods/` named after your mod. Put in the mod file and a short `README.md` that says what it does. Your GitHub username goes on it as the author. Add a `- Made by:` line if you'd like a different name.
-3. Add a picture called `preview.png`, around 16:9, if you have one. That picture is what people see in Capri's mods window. Mods without one get a default picture.
-4. Open a pull request.
+## OBS setup
 
-## Stay safe
-- Only install mods from here, or from people you trust.
-- Only get Capri itself from [capriai.app](https://capriai.app) or [its GitHub](https://github.com/lachydotmcg/capri-desktop/releases).
+1. In Capri’s Mainframe, click **Stream Mode: Off** to turn it on.
+2. In OBS, add a **Browser Source** with URL **http://127.0.0.1:8766/**, width **720**, and height **720**.
+3. Enable **Control audio via OBS**. Optionally set the custom frame rate to **60 FPS**.
+4. If audio is blocked, open **Interact** and click **Enable Capri audio**. If OBS loaded the page while Stream Mode was off, turn it on and refresh the source.
 
-Questions? Ask on the [Capri Discord](https://discord.gg/capridesktop).
+Use Capri’s regular voice and text controls to interact with her. **Stream Mode: Off** stops the local server. The mirrored speech bubble can show text from your conversation, and application audio can include Capri’s sound effects.
+
+## Memory in Stream Mode
+
+While Stream Mode is on, direct inputs intercepted by the mod use an isolated model request without Capri's saved memories or private conversation history. Turning Stream Mode off restores the normal input path. Built-in autonomous features, other mods and provider-side memory are outside this control.
+
+## Credits
+
+- Made by Dominik20074
+- Version 1.6.2

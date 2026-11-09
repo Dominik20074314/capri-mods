@@ -1,0 +1,446 @@
+// capri-mod: 1
+// id: twitch-cohost
+// name: Capri Stream
+// version: 1.6.2
+// author: Dominik20074
+// description: Streams Capri's avatar, speech bubble and audio to a local OBS browser source.
+using System;
+using System.Drawing;
+using System.Collections.Generic;
+using System.IO;
+using System.Net;
+using System.Net.Sockets;
+using System.Reflection;
+using System.Text;
+using System.Threading;
+using System.Windows.Forms;
+using CapriDesktop;
+
+public sealed class CapriStream : ICapriMod
+{
+    private const BindingFlags Fields = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+    private ICapriHost host;
+    private object owner;
+    private object brain;
+    private MethodInfo isolatedReply;
+    private volatile int streamGeneration;
+    private int replying;
+    private Control button;
+    private System.Windows.Forms.Timer layout;
+    private List<KeyValuePair<Control,int>> rows;
+    private StreamBrowserOutput output;
+    private object streamPreferences;
+    private FieldInfo noSitting;
+    private bool previousNoSitting;
+    private Action keepStanding;
+
+    private void StandForStream()
+    {
+        var type = owner.GetType();
+        var preferences = type.GetField("preferences", Fields);
+        var stand = type.GetMethod("StandUp", Fields);
+        var activeClip = type.GetField("clip", Fields);
+        var idleField = type.GetField("idle", Fields);
+        var seat = type.GetField("seat", Fields);
+        object settings = preferences == null ? null : preferences.GetValue(owner);
+        var setting = settings == null ? null : settings.GetType().GetField("NoSitting", Fields);
+        if (stand == null || setting == null || idleField == null || activeClip == null || seat == null)
+            throw new NotSupportedException();
+        object idle = idleField.GetValue(owner);
+        var play = type.GetMethod("Play", Fields, null, new[] { idleField.FieldType }, null);
+        var name = idleField.FieldType.GetField("name", Fields);
+        var redraw = type.GetMethod("UpdateAnimation", Fields, null, Type.EmptyTypes, null);
+        if (idle == null || play == null || name == null || redraw == null) throw new NotSupportedException();
+        previousNoSitting = (bool)setting.GetValue(settings);
+        setting.SetValue(settings, true);
+        streamPreferences = settings;
+        noSitting = setting;
+        Action standNow = delegate
+        {
+            stand.Invoke(owner, null);
+            play.Invoke(owner, new[] { idle });
+            redraw.Invoke(owner, null);
+        };
+        keepStanding = delegate
+        {
+            object current = activeClip.GetValue(owner);
+            string pose = current == null ? "" : name.GetValue(current) as string ?? "";
+            if (seat.GetValue(owner) != null || pose.StartsWith("perch", StringComparison.OrdinalIgnoreCase)
+                || pose.StartsWith("laydown", StringComparison.OrdinalIgnoreCase)) standNow();
+        };
+        standNow();
+    }
+
+    private void RestoreSitting()
+    {
+        keepStanding = null;
+        if (noSitting == null) return;
+        noSitting.SetValue(streamPreferences, previousNoSitting);
+        noSitting = null;
+        streamPreferences = null;
+    }
+
+    public void Start(ICapriHost capri)
+    {
+        host = capri;
+        owner = capri.GetType().GetField("capri", Fields).GetValue(capri);
+        brain = owner.GetType().GetField("brain", Fields).GetValue(owner);
+        isolatedReply = brain.GetType().GetMethod("Aside", Fields, null,
+            new[] { typeof(string), typeof(string), typeof(int), typeof(bool) }, null);
+        var frame = (Control)owner.GetType().GetField("mainframe", Fields).GetValue(owner);
+        Type ui = frame.GetType();
+        var make = ui.GetMethod("Make", Fields, null, new[] {
+            typeof(string), typeof(int), typeof(int), typeof(int), typeof(int), typeof(EventHandler), typeof(string)
+        }, null);
+        rows = (List<KeyValuePair<Control,int>>)ui.GetField("mainLeft", Fields).GetValue(frame);
+        var paged = ui.GetField("paged", Fields);
+        var modded = ui.GetField("modded", Fields);
+        var scaled = ui.GetMethod("Scaled", Fields, null, new[] { typeof(int) }, null);
+        Control quit = rows.Find(row => row.Key.Text == "Quit Capri").Key;
+        button = (Control)make.Invoke(frame, new object[] { "Stream Mode: Off", 28, 310, 328, 28,
+            new EventHandler(Toggle), "Toggle local OBS output at http://127.0.0.1:8766/" });
+        rows.Add(new KeyValuePair<Control,int>(button, 28));
+        layout = new System.Windows.Forms.Timer { Interval = 250 };
+        layout.Tick += delegate
+        {
+            if (keepStanding != null) keepStanding();
+            if (frame.IsDisposed || !frame.Visible) return;
+            bool show = !(bool)paged.GetValue(frame) && !(bool)modded.GetValue(frame);
+            if (button.Visible != show) button.Visible = show;
+            if (!show || quit == null) return;
+            var bounds = new Rectangle((int)scaled.Invoke(frame, new object[] { 28 }), quit.Bottom + 10,
+                (int)scaled.Invoke(frame, new object[] { 328 }), (int)scaled.Invoke(frame, new object[] { 28 }));
+            if (button.Bounds != bounds) button.Bounds = bounds;
+        };
+        layout.Start();
+    }
+
+    private void Toggle(object sender, EventArgs args)
+    {
+        if (output != null) StopOutput();
+        else
+        {
+            try
+            {
+                if (isolatedReply == null) throw new NotSupportedException();
+                output = new StreamBrowserOutput(owner);
+                StandForStream();
+            }
+            catch (Exception)
+            {
+                StopOutput();
+                host.Say("Could not start OBS output or enable standing mode.");
+            }
+        }
+        button.Text = output == null ? "Stream Mode: Off" : "Stream Mode: On";
+        button.Invalidate();
+    }
+
+    private void StopOutput()
+    {
+        streamGeneration++;
+        if (output != null) { output.Dispose(); output = null; }
+        RestoreSitting();
+    }
+
+    public bool Heard(string words)
+    {
+        if (output == null || string.IsNullOrWhiteSpace(words)) return false;
+        if (words.TrimStart().StartsWith("/") || Interlocked.CompareExchange(ref replying, 1, 0) != 0) return true;
+        int generation = streamGeneration;
+        ThreadPool.QueueUserWorkItem(delegate
+        {
+            try
+            {
+                if (generation != streamGeneration) return;
+                string reply = isolatedReply.Invoke(brain, new object[] {
+                    "You are Capri speaking on stream. Respond naturally to the current message. Do not disclose or infer private information.",
+                    words, 120, false
+                }) as string;
+                if (generation == streamGeneration && !string.IsNullOrWhiteSpace(reply)) host.Say(reply);
+            }
+            catch (Exception) { host.Log("Capri Stream could not generate an isolated reply."); }
+            finally { Interlocked.Exchange(ref replying, 0); }
+        });
+        return true;
+    }
+
+    public void Stop()
+    {
+        if (layout != null) layout.Dispose();
+        StopOutput();
+        if (button == null) return;
+        rows.RemoveAll(row => row.Key == button);
+        button.Dispose();
+    }
+}
+
+internal sealed class StreamBrowserOutput : IDisposable
+{
+    private const string AudioScript = @"<button id='sound' hidden style='position:absolute;top:4px;left:4px'>Enable Capri audio</button><script>
+const button=document.getElementById('sound');let ac,at=0,cursor=-1;
+async function enable(){try{ac=ac||new AudioContext();await ac.resume();button.hidden=ac.state==='running'}catch(e){button.hidden=false}}
+button.onclick=enable;
+enable();
+setTimeout(()=>{button.hidden=!!ac&&ac.state==='running'},1000);
+async function audio(){
+  try{
+    if(ac&&ac.state==='running'){
+      const r=await fetch('/audio?after='+cursor,{cache:'no-store'});
+      if(!r.ok)throw 0;
+      const bytes=await r.arrayBuffer();
+      if(bytes.byteLength>=8){
+        const d=new DataView(bytes);
+        cursor=Number(d.getBigInt64(0,true));
+        const count=(bytes.byteLength-8)>>1;
+        if(count){
+          const b=ac.createBuffer(1,count,16000),samples=b.getChannelData(0);
+          for(let i=0;i<count;i++)samples[i]=d.getInt16(8+i*2,true)/32768;
+          const now=ac.currentTime;
+          if(at<now||at>now+0.35)at=now+0.045;
+          const node=ac.createBufferSource();node.buffer=b;node.connect(ac.destination);
+          node.start(at);at+=b.duration;
+        }
+      }
+    }
+  }catch(e){cursor=-1;at=0}
+  setTimeout(audio,25);
+}audio();
+</script>";
+    private const BindingFlags Members = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+    private const string Page = "<!doctype html><meta charset=utf-8><style>html,body{margin:0;background:transparent;width:100%;height:100%;overflow:hidden}img{width:100%;height:100%;object-fit:contain}</style><img hidden><script>const img=document.querySelector('img');let url;async function frame(){try{const r=await fetch('/frame.png',{cache:'no-store'});if(!r.ok)throw 0;const next=URL.createObjectURL(await r.blob());img.src=next;img.hidden=false;if(url)URL.revokeObjectURL(url);url=next}catch(e){img.hidden=true;img.removeAttribute('src');if(url)URL.revokeObjectURL(url);url=null}requestAnimationFrame(frame)}frame()</script>";
+    private readonly Control avatar;
+    private readonly FieldInfo clip, cell, mouth;
+    private readonly MethodInfo draw;
+    private readonly Control bubble;
+    private readonly PropertyInfo bubbleImage;
+    private readonly TcpListener server;
+    private readonly System.Windows.Forms.Timer timer;
+    private readonly object audioGate = new object();
+    private readonly Queue<KeyValuePair<long, byte[]>> audio = new Queue<KeyValuePair<long, byte[]>>();
+    private long audioSequence;
+    private volatile byte[] png;
+    private volatile bool stopped;
+    private long lastRequest;
+    private int encoding;
+
+    internal StreamBrowserOutput(object owner)
+    {
+        avatar = owner as Control;
+        if (avatar == null) throw new NotSupportedException();
+        Type type = owner.GetType();
+        var box = type.GetField("box", Members);
+        bubble = box == null ? null : box.GetValue(owner) as Control;
+        bubbleImage = bubble == null ? null : bubble.GetType().GetProperty("Image", Members);
+        clip = type.GetField("drawnClip", Members);
+        cell = type.GetField("drawnCell", Members);
+        mouth = type.GetField("drawnMouth", Members);
+        draw = clip == null ? null : type.GetMethod("Draw", Members, null,
+            new[] { typeof(Graphics), clip.FieldType, typeof(int), typeof(int), typeof(Bitmap) }, null);
+        if (draw == null || cell == null || mouth == null) throw new NotSupportedException();
+        server = new TcpListener(IPAddress.Loopback, 8766);
+        server.ExclusiveAddressUse = true;
+        server.Start(8);
+        timer = new System.Windows.Forms.Timer { Interval = 16 };
+        timer.Tick += Render;
+        timer.Start();
+        new Thread(Serve) { IsBackground = true }.Start();
+        new Thread(CaptureAudio) { IsBackground = true }.Start();
+    }
+
+    private void CaptureAudio()
+    {
+        IDisposable tap = null;
+        try
+        {
+            Type type = avatar.GetType().Assembly.GetType("CapriDesktop.CallEars+Tap");
+            if (type == null) return;
+            var open = type.GetMethod("Open", BindingFlags.Static | BindingFlags.NonPublic);
+            if (open == null) return;
+            int pid;
+            using (var process = System.Diagnostics.Process.GetCurrentProcess()) pid = process.Id;
+            tap = open.Invoke(null, new object[] { pid, "Capri", null }) as IDisposable;
+            if (tap == null) return;
+            var captureField = type.GetField("capture", Members);
+            if (captureField == null) return;
+            object capture = captureField.GetValue(tap);
+            Type iface = captureField.FieldType;
+            var next = iface.GetMethod("GetNextPacketSize");
+            var get = iface.GetMethod("GetBuffer");
+            var release = iface.GetMethod("ReleaseBuffer");
+            if (next == null || get == null || release == null) return;
+            while (!stopped)
+            {
+                using (var chunk = new MemoryStream())
+                {
+                    for (int i = 0; i < 24 && !stopped; i++)
+                    {
+                        object[] waiting = { 0 };
+                        if ((int)next.Invoke(capture, waiting) != 0) return;
+                        if ((int)waiting[0] == 0) break;
+                        object[] packet = { IntPtr.Zero, 0, 0, 0L, 0L };
+                        if ((int)get.Invoke(capture, packet) != 0) return;
+                        int frames = (int)packet[1];
+                        try
+                        {
+                            if (frames <= 0 || frames > 16000) continue;
+                            var bytes = new byte[frames * 2];
+                            IntPtr pointer = (IntPtr)packet[0];
+                            if (pointer != IntPtr.Zero && ((int)packet[2] & 2) == 0)
+                                System.Runtime.InteropServices.Marshal.Copy(pointer, bytes, 0, bytes.Length);
+                            chunk.Write(bytes, 0, bytes.Length);
+                        }
+                        finally { release.Invoke(capture, new object[] { frames }); }
+                    }
+                    if (chunk.Length != 0)
+                    {
+                        lock (audioGate)
+                        {
+                            audio.Enqueue(new KeyValuePair<long, byte[]>(++audioSequence, chunk.ToArray()));
+                            while (audio.Count > 8) audio.Dequeue();
+                        }
+                    }
+                }
+                Thread.Sleep(30);
+            }
+        }
+        catch (Exception) { }
+        finally { if (tap != null) tap.Dispose(); }
+    }
+
+    private byte[] AudioAfter(long cursor)
+    {
+        lock (audioGate)
+        using (var data = new MemoryStream())
+        using (var writer = new BinaryWriter(data))
+        {
+            writer.Write(audioSequence);
+            if (cursor >= 0 && cursor <= audioSequence)
+                foreach (var packet in audio)
+                    if (packet.Key > cursor) writer.Write(packet.Value);
+            return data.ToArray();
+        }
+    }
+
+    private void Render(object sender, EventArgs args)
+    {
+        if (stopped || avatar.IsDisposed || DateTime.UtcNow.Ticks - Interlocked.Read(ref lastRequest) > TimeSpan.FromSeconds(2).Ticks
+            || Interlocked.CompareExchange(ref encoding, 1, 0) != 0) return;
+        Bitmap image = null;
+        try
+        {
+            object sprite = clip.GetValue(avatar);
+            if (sprite == null || avatar.Width <= 0 || avatar.Height <= 0) { Interlocked.Exchange(ref encoding, 0); return; }
+            image = new Bitmap(720, 720, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            using (Graphics graphics = Graphics.FromImage(image))
+            {
+                graphics.Clear(Color.Transparent);
+                graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                var speech = bubbleImage != null && !bubble.IsDisposed && bubble.Visible
+                    ? bubbleImage.GetValue(bubble, null) as Bitmap : null;
+                float speechHeight = 0;
+                if (speech != null)
+                {
+                    float bubbleScale = Math.Min(696f / speech.Width, 260f / speech.Height);
+                    speechHeight = speech.Height * bubbleScale;
+                    float width = speech.Width * bubbleScale;
+                    graphics.DrawImage(speech, new RectangleF((720 - width) / 2, 12, width, speechHeight));
+                    speechHeight += 24;
+                }
+                float scale = Math.Min(720f / avatar.Width, 930f * (720 - speechHeight) / 720f / avatar.Height);
+                graphics.TranslateTransform((720 - avatar.Width * scale) / 2, (720 + speechHeight - avatar.Height * scale) / 2);
+                graphics.ScaleTransform(scale, scale);
+                draw.Invoke(avatar, new[] { (object)graphics, sprite, cell.GetValue(avatar), mouth.GetValue(avatar), null });
+            }
+        }
+        catch (Exception)
+        {
+            if (image != null) image.Dispose();
+            png = null;
+            Interlocked.Exchange(ref encoding, 0);
+            return;
+        }
+        ThreadPool.QueueUserWorkItem(delegate
+        {
+            try
+            {
+                using (image)
+                using (var buffer = new MemoryStream())
+                {
+                    image.Save(buffer, System.Drawing.Imaging.ImageFormat.Png);
+                    if (!stopped) png = buffer.ToArray();
+                }
+            }
+            catch (Exception) { png = null; }
+            finally { Interlocked.Exchange(ref encoding, 0); }
+        });
+    }
+
+    private void Serve()
+    {
+        while (!stopped)
+        {
+            try
+            {
+                using (TcpClient client = server.AcceptTcpClient())
+                {
+                    if (stopped) return;
+                    client.ReceiveTimeout = client.SendTimeout = 1000;
+                    using (NetworkStream stream = client.GetStream()) Reply(stream);
+                }
+            }
+            catch (SocketException) { if (stopped) return; }
+            catch (IOException) { }
+            catch (ObjectDisposedException) { return; }
+            catch (InvalidOperationException) { return; }
+        }
+    }
+
+    private void Reply(NetworkStream stream)
+    {
+        var request = new StringBuilder();
+        while (request.Length < 8192)
+        {
+            int next = stream.ReadByte();
+            if (next < 0 || stopped) return;
+            request.Append((char)next);
+            int n = request.Length;
+            if (n >= 4 && request[n-4] == '\r' && request[n-3] == '\n' && request[n-2] == '\r' && request[n-1] == '\n') break;
+        }
+        string[] lines = request.ToString().Split(new[] { "\r\n" }, StringSplitOptions.None);
+        if (Array.IndexOf(lines, "Host: 127.0.0.1:8766") < 0) return;
+        string[] first = lines[0].Split(' ');
+        if (first.Length != 3 || first[0] != "GET") return;
+        string route = first[1];
+        byte[] body = null;
+        string type = "text/html; charset=utf-8";
+        if (route == "/") body = Encoding.UTF8.GetBytes(Page + AudioScript);
+        else if (route.StartsWith("/audio?after=", StringComparison.Ordinal))
+        {
+            long cursor;
+            if (!long.TryParse(route.Substring(13), out cursor)) return;
+            body = AudioAfter(cursor);
+            type = "application/octet-stream";
+        }
+        else if (route == "/frame.png")
+        {
+            Interlocked.Exchange(ref lastRequest, DateTime.UtcNow.Ticks);
+            body = png;
+            type = "image/png";
+        }
+        if (stopped) return;
+        string status = body == null ? "503 Service Unavailable" : "200 OK";
+        byte[] header = Encoding.ASCII.GetBytes("HTTP/1.1 " + status + "\r\nConnection: close\r\nCache-Control: no-store\r\nContent-Type: "
+            + type + "\r\nContent-Length: " + (body == null ? 0 : body.Length) + "\r\n\r\n");
+        stream.Write(header, 0, header.Length);
+        if (body != null && !stopped) stream.Write(body, 0, body.Length);
+    }
+
+    public void Dispose()
+    {
+        stopped = true;
+        timer.Dispose();
+        server.Stop();
+        png = null;
+    }
+}
