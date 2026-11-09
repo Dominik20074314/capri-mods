@@ -12,7 +12,12 @@ The mod shows a click-through copy of the speech bubble at 63% opacity while Hol
 2. Open **Mainframe → CAPRI → Mods and approve it.
 3. Open **Mainframe → Settings → Capri** and use the **Speech Glass** switch in the **Hologram** section. The mod remembers your choice.
 
-## Changelog
+## Submit without git
+No git needed: fill in the [Submit a mod](https://github.com/lachydotmcg/capri-mods/issues/new?template=submit-mod.yml) form and drag your mod file in, zipped first. A pull request gets opened for you, with your GitHub username as the author, and it's read like any other mod before it goes up. To change something, edit your issue.
+
+## Stay safe
+- Only install mods from here, or from people you trust.
+- Only get Capri itself from [capriai.app](https://capriai.app) or [its GitHub](https://github.com/lachydotmcg/capri-desktop/releases).
 
 ### v0.1.10
 
